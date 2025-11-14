@@ -1,1 +1,205 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>1 – 50 Number Venn Diagram</title>
+<style>
+  :root{
+    --radius:220px; /* circle radius  */
+    --tile:40px;    /* token diameter */
+    --gap:10px;     /* rack gap       */
+    --cols:5;       /* rack columns   */
+  }
+  *{margin:0;padding:0;box-sizing:border-box}
+  body{
+    font-family:system-ui,sans-serif;
+    background:#d9f0ff;
+    display:flex;flex-direction:column;min-height:100vh;user-select:none;
+  }
+  h1{margin:1rem 0 .6rem 16px;font-size:clamp(1.8rem,2.2vw+1rem,3rem)}
+
+  /* ─── layout ─── */
+  #workspace{display:flex;width:100%;align-items:flex-start;position:relative}
+  #tokenRack{position:relative;
+             width:calc(var(--tile)*var(--cols)+var(--gap)*(var(--cols)+1));
+             padding:8px 4px 8px 8px;}
+  #diagramWrap{flex:1;display:flex;justify-content:center}
+  #diagram{position:relative;width:calc(3.2*var(--radius))}
+
+  /* ─── circles ─── */
+  .circle{position:absolute;width:calc(var(--radius)*2);height:calc(var(--radius)*2);
+          border-radius:50%;border:6px solid;display:flex;justify-content:center;
+          align-items:flex-start;padding-top:10px;font-weight:700;font-size:1.15rem;
+          pointer-events:none}
+  #even  {border-color:#e60000;color:#e60000;background:rgba(255,0,0,.10)}
+  #prime {border-color:#007000;color:#007000;background:rgba(0,128,0,.10)}
+  #square{border-color:#0040ff;color:#0040ff;background:rgba(0,0,255,.10)}
+
+  /* ─── tokens ─── */
+  .tile{position:absolute;width:var(--tile);height:var(--tile);line-height:var(--tile);
+        border-radius:50%;border:3px solid #222;background:#ffe300;text-align:center;
+        font-size:.9rem;font-weight:700;cursor:grab;touch-action:none;transition:transform .14s;
+        box-shadow:2px 2px 4px rgba(0,0,0,.45)}
+  .tile:active{transform:scale(.88)}
+
+  /* ─── fixed UI ─── */
+  #checkBtn{position:fixed;left:20px;bottom:20px;font-size:1.4rem;padding:.7rem 2.4rem;
+            border:4px solid #004170;border-radius:10px;background:#0091ff;color:#fff;
+            font-weight:800;cursor:pointer;z-index:1000}
+  #checkBtn:hover{filter:brightness(1.08)}#checkBtn:active{transform:scale(.95)}
+  #banner{position:fixed;left:20px;bottom:90px;width:275px;text-align:left;font-size:1.05rem;
+          min-height:1.4em}
+  #banner.ok{color:#009600}#banner.no{color:#d40000}
+
+  /* ─── celebration GIF ─── */
+  #celebrationGif{position:fixed;right:20px;bottom:20px;max-width:260px;
+                  z-index:999;display:none;border-radius:8px;box-shadow:0 4px 10px rgba(0,0,0,.4)}
+</style>
+</head>
+<body>
+  <h1>Drag each number into the correct region</h1>
+
+  <div id="workspace">
+    <div id="tokenRack"></div>
+
+    <div id="diagramWrap">
+      <div id="diagram">
+        <div id="even"   class="circle">Even</div>
+        <div id="prime"  class="circle">Prime</div>
+        <div id="square" class="circle">Square</div>
+      </div>
+    </div>
+  </div>
+
+  <button id="checkBtn">CHECK</button>
+  <div id="banner"></div>
+  <img id="celebrationGif" alt="Celebration GIF">
+
+<!-- confetti micro-library -->
+<script src="https://cdn.jsdelivr.net/npm/canvas-confetti@1.9.3/dist/confetti.browser.min.js" defer></script>
+
+<script>
+/* ========= 1. circle geometry ========= */
+const R        = +getComputedStyle(document.documentElement).getPropertyValue('--radius').replace('px','');
+const d        = 1.15*R, dx=d/2, dy=d*Math.sqrt(3)/2;
+const centresLocal = {
+  even  : {x:1.6*R      , y:R+8        },
+  prime : {x:1.6*R-dx   , y:R+8+dy     },
+  square: {x:1.6*R+dx   , y:R+8+dy     }
+};
+for(const id in centresLocal){
+  const {x,y} = centresLocal[id];
+  const el = document.getElementById(id);
+  el.style.left = (x-R)+'px';
+  el.style.top  = (y-R)+'px';
+}
+/* translate to workspace coordinates */
+const wsRect = document.getElementById('workspace').getBoundingClientRect();
+const centres = {};
+['even','prime','square'].forEach(id=>{
+  const rect = document.getElementById(id).getBoundingClientRect();
+  centres[id] = {x:rect.left-wsRect.left+R, y:rect.top-wsRect.top+R};
+});
+
+/* ========= 2. token rack ========= */
+const rack = document.getElementById('tokenRack');
+const TILE = +getComputedStyle(document.documentElement).getPropertyValue('--tile').replace('px','');
+const GAP  = +getComputedStyle(document.documentElement).getPropertyValue('--gap').replace('px','');
+const COLS = +getComputedStyle(document.documentElement).getPropertyValue('--cols');
+
+for(let n=1;n<=50;n++){
+  const col = (n-1)%COLS, row = Math.floor((n-1)/COLS);
+  const t = document.createElement('div');
+  t.className = 'tile';
+  t.textContent = n;
+  t.dataset.value = n;
+  t.style.left = (GAP + col*(TILE+GAP))+'px';
+  t.style.top  = (GAP + row*(TILE+GAP))+'px';
+  rack.appendChild(t);
+  makeDrag(t);
+}
+
+/* ========= 3. helper functions ========= */
+const isPrime  = n => { if(n<2) return false; for(let i=2;i*i<=n;i++) if(n%i===0) return false; return true; };
+const isSquare = n => Number.isInteger(Math.sqrt(n));
+const targets  = n => [n%2===0, isPrime(n), isSquare(n)];
+const inside   = (x,y,c) => (x-c.x)**2 + (y-c.y)**2 < R**2;
+
+/* Check one token – returns true/false only (no colouring) */
+function tokenCorrect(tile){
+  const n   = +tile.dataset.value;
+  const ws  = document.getElementById('workspace').getBoundingClientRect();
+  const rect= tile.getBoundingClientRect();
+  const cx  = rect.left + rect.width/2 - ws.left;
+  const cy  = rect.top  + rect.height/2 - ws.top;
+  const res = [
+    inside(cx,cy,centres.even),
+    inside(cx,cy,centres.prime),
+    inside(cx,cy,centres.square)
+  ];
+  return res.every((v,i)=> v === targets(n)[i]);
+}
+
+/* ========= 4. drag logic ========= */
+let z=1;
+function makeDrag(el){
+  let offX,offY;
+  el.addEventListener('pointerdown',e=>{
+    e.preventDefault();
+    el.setPointerCapture(e.pointerId);
+    offX=e.offsetX; offY=e.offsetY;
+    el.style.zIndex=++z;
+  });
+  el.addEventListener('pointermove',e=>{
+    if(e.buttons===0) return;
+    const ws=document.getElementById('workspace').getBoundingClientRect();
+    el.style.left=(e.clientX-ws.left-offX)+'px';
+    el.style.top =(e.clientY-ws.top -offY)+'px';
+  });
+  el.addEventListener('pointerup',e=>{
+    el.releasePointerCapture(e.pointerId);
+    /* no feedback on drop */
+  });
+}
+
+/* ========= 5. celebration helpers ========= */
+const gifList=[
+  'https://media1.tenor.com/m/z-oBTP1WqfgAAAAd/excited.gif',
+  'https://media1.tenor.com/m/qnkGaqEx178AAAAC/woo-dance.gif',
+  'https://media1.tenor.com/m/MRFtI8B0u5kAAAAd/ateez-san.gif',
+  'https://media.tenor.com/zQs7oWf5PuAAAAAi/anivers%C3%A1rio-comemora%C3%A7%C3%A3o.gif'
+];
+function launchConfetti(){
+  /* simple burst */
+  confetti({particleCount:120,spread:70,origin:{y:0.6}});
+  confetti({particleCount:80, spread:90,origin:{x:0.2,y:0.7}});
+  confetti({particleCount:80, spread:90,origin:{x:0.8,y:0.7}});
+}
+function showGif(){
+  const img=document.getElementById('celebrationGif');
+  img.src = gifList[Math.floor(Math.random()*gifList.length)];
+  img.style.display='block';
+}
+
+/* ========= 6. “CHECK” button ========= */
+const banner = document.getElementById('banner');
+document.getElementById('checkBtn').addEventListener('click',()=>{
+  const tiles=[...document.querySelectorAll('.tile')];
+  const perfect = tiles.every(tokenCorrect);
+
+  if(perfect){
+    banner.textContent='🎉 Perfect! Well done!';
+    banner.className='ok';
+    launchConfetti();
+    showGif();
+  }else{
+    banner.textContent='Not quite — keep trying!';
+    banner.className='no';
+  }
+});
+</script>
+</body>
+</html>
+
 
